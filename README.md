@@ -13,6 +13,7 @@ set of known non-methylated regions.
     - Rsamtools
     - GenomicRanges
     - rtracklayer
+    - seqinr
 
 ## Usage
 
