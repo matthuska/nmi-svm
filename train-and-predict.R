@@ -38,7 +38,7 @@ library(seqinr)
 # TRAIN
 # --------------------------------------------------------------------------
 
-source("../fit-spectrum-svm.R")
+source("fit-spectrum-svm.R")
 
 # Read in training sequences
 genome <- FaFile(conf$trainseqs)
@@ -60,6 +60,9 @@ x <- toupper(c(Rsamtools::scanFa(genome, nmis_binned),
 y <- factor(c(rep("NMI", length(nmis_binned)),
               rep("Background", length(bg_binned))), levels=c("NMI", "Background"))
 
+cat("Number of windows in each training class:\n")
+print(summary(y))
+
 stopifnot(length(x) == length(y))
 
 # Fit model
@@ -69,14 +72,11 @@ params$k <- conf$k
 # Extra parameters that we will hard code for now
 params$alphabet <- "SNP"
 params$usesign <- FALSE
-params$eps <- 1e-4
+params$eps <- 1e-2
 
 cat("Fitting model (this may take a while)... ")
 fit <- fit_spectrum_svm(matrix(x, ncol=1), y, params)
 cat("done!\n")
-
-# Save model for use with predict.R
-saveRDS(fit, "fit.rds")
 
 # Clean up a bit
 rm(x, y)
@@ -85,19 +85,41 @@ rm(x, y)
 # PREDICT
 # --------------------------------------------------------------------------
 
-source("../predict-spectrum-svm.R")
+source("predict-spectrum-svm.R")
 
 cat("Loading sequences to predict on (can be slow when using an entire genome)... ")
 pred_seqs <- seqinr::read.fasta(conf$predictseqs, as.string=TRUE)
 cat("done!\n")
 
+# Trim the sequences so that they fit within a window
+pred_seqs_orig <- pred_seqs
+pred_seqs <- strtrim(unlist(pred_seqs), sapply(pred_seqs, nchar) - (sapply(pred_seqs, nchar) %% conf$window))
+
+# Collapse all sequences into one big sequence
+allseqs <- paste0(unlist(pred_seqs), collapse="")
+
 # Predict new windows
 cat("Predicting NMIs... ")
-preds <- predict_spectrum_svm(fit, unlist(pred_seqs), conf$window, param=params)
+preds <- predict_spectrum_svm(fit, allseqs, conf$window, param=params)
 cat("done!\n")
 
 saveRDS(preds, "preds.rds")
 
-# TODO: generate a csv/bigWig file with the predictions, and a .bed file with
-# windows > 0 score
+out_gr <- GRanges(names(pred_seqs),
+                  ranges=IRanges(start=rep(1, length(pred_seqs)),
+                                 end=nchar(pred_seqs)))
+width(out_gr) <- width(out_gr) - (width(out_gr) %% conf$window)
+# Bin the regions into windows
+out_gr_binned <- unlist(tile(out_gr, width=conf$window))
+mcols(out_gr_binned) <- preds
+
+saveRDS(preds, "preds-gr.rds")
+
+out_df <- as.data.frame(out_gr_binned)
+write.table(out_df, "preds-all.csv", sep="\t", quote=FALSE, row.names=FALSE)
+
+# Output just the ranges of windows that are predicted to be NMIs
+out_gr_filtered <- reduce(out_gr_binned[preds[["scores"]] > 0])
+out_df2 <- as.data.frame(out_gr_filtered)
+write.table(out_df2, "preds-windows.csv", sep="\t", quote=FALSE, row.names=FALSE)
 

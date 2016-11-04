@@ -6,7 +6,7 @@ set of known non-methylated regions.
 
 ## Software Dependencies
 
-- Shogun machine learning library (version 3.2.1) and its R library
+- [Shogun machine learning toolbox](http://shogun-toolbox.org/) (version 3.2.1) and its R library
 - R and the following R packages:
     - optparse
     - digest
@@ -59,3 +59,14 @@ Options:
 
 ```
 
+Example invocation:
+
+```bash
+
+$ ./train-and-predict.R -t ~/example/hg19.fa \
+                        -f ~/example/nmis-chr1-small.bed \
+			-b ~/example/notnmis-chr1-small.bed \
+			-c 1.0 -k 3 -w 750 \
+			-p ~/example/hg19-chr10_11.fa \
+			-j 20
+```
